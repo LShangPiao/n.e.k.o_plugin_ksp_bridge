@@ -1,7 +1,7 @@
 [plugin]
 id = "ksp_bridge"
 name = "和猫娘一起坐火箭"
-description = "连接《坎巴拉太空计划 Kerbal Space Program》，让猫娘读取飞行遥测：飞船状态、高度速度、轨道根数、剩余燃料、乘员名单、锁定目标与星系天体。纯只读，不会碰你的飞船，也不接管任何操作。需要先在游戏 GameData 目录安装配套的 N.E.K.O-KSP-bridge 模组。"
+description = "连接《坎巴拉太空计划 Kerbal Space Program》，让猫娘读取飞行遥测：飞船状态、高度速度、轨道根数、剩余燃料、乘员名单、锁定目标与星系天体。纯只读，不会碰你的飞船，也不接管任何操作。需先在游戏 GameData 目录安装配套模组 Neko Downlink（N.E.K.O-KSP-bridge），下载：https://www.curseforge.com/kerbal/ksp-mods/neko-downlink"
 short_description = "让猫娘陪你玩坎巴拉：读懂轨道、燃料、飞船和目标，全程只读不动手"
 keywords = [
     "坎巴拉", "KSP", "Kerbal", "Space Program", "航天", "火箭", "轨道",
