@@ -1,4 +1,4 @@
 [project]
-name = "sfs_bridge"
-version = "0.1.0"
+name = "ksp_bridge"
+version = "0.2.0"
 dependencies = []
