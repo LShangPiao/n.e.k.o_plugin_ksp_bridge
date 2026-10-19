@@ -154,10 +154,19 @@ _KSP_DOC = """【坎巴拉太空计划是什么】
 KSP 是一款「用乐高式零件拼火箭、按真实开普勒轨道飞」的航天模拟游戏。
 核心循环：造火箭 → 发射 → 入轨 → 变轨 → 对接 → 登陆 → 返回。
 
-和《航天模拟器》不同，KSP 用的是**接近真实比例**的星系（但缩小了约 10 倍）：
+和《航天模拟器》不同，KSP 用的是**开普勒轨道**的航天模拟，默认星系（原版）是缩小了约 10 倍的：
 - Kerbin 半径 600 km，重力 1.0 g，大气 70 km —— 相当于地球的 1/10 尺寸
 - 因此环绕速度约 2.3 km/s（现实中是 7.9 km/s）
-- 入轨判定看**近点是否高过大气层顶**（Kerbin 是 70 km，不是 100 km 卡门线）
+- 入轨判定看**近点是否高过大气层顶**（原版 Kerbin 是 70 km，不是 100 km 卡门线）
+
+【星球名字必须来自游戏数据，不要背】
+上面这些数字只是**原版 Kerbin** 的参考值。玩家可能装了 Realism Overhaul / RSS 之类的
+真实化模组，那时候母星叫 **Earth（地球）**，半径 6371 km，大气 140 km，环绕速度 7.9 km/s，
+完全不是 Kerbin 那一套。
+- **用户问「我在哪颗星球」「这个星球多大」「大气多高」时，只依据 /state 里的 body 字段、
+  /orbit 里的 body、或 list_ksp_bodies 的返回来说话**，这些是游戏真实值。
+- 不要因为「KSP 默认是 Kerbin」就替玩家把 Earth 说成 Kerbin。
+- 数值也只引用接口返回的，别把原版数字套到真实化星系上。
 
 【关键术语】
 - 远点 apoapsis (Ap) —— 轨道最高点
@@ -185,11 +194,13 @@ KSP 是一款「用乐高式零件拼火箭、按真实开普勒轨道飞」的�
 燃料分「当前级」和「全船」。玩家常关心「还剩多少」，用 /resources 看总量。
 
 【怎么帮玩家】
-- 问他现在什么情况 → get_ksp_status
-- 关心轨道/能不能入轨 → get_ksp_orbit（里面有 is_stable_orbit）
-- 关心油还够不够 → get_ksp_resources
-- 关心目标/对接 → get_ksp_target（有距离和相对速度）
-- 想了解星系 → list_ksp_bodies
+- 上下文里已经有一条「【KSP 自动播报】」时，**先直接用那条里的数字回答**，
+  不要再为了同一批数据去调工具 —— 玩家已经抱怨过「听到了不说话、查到才回」。
+- 自动播报里没有的细节才调工具：
+  轨道根数全量/变轨窗口 → get_ksp_orbit；逐项资源 → get_ksp_resources；
+  目标/对接 → get_ksp_target；星系 → list_ksp_bodies。
+- 确实要查、又可能要等一会儿时，**先说一句「我看一眼仪表」**再调工具，
+  不要一声不吭地卡着。
 
 注意：**这个插件是只读的**，你不能操作飞船。
 要指点玩家怎么飞就给出建议，别假装你能替他按按钮。
@@ -212,7 +223,7 @@ class KspBridgePlugin(NekoPluginBase):
 
         self._cfg: Dict[str, Any] = {}
         self._bridge_url: str = DEFAULT_BRIDGE_URL
-        self._timeout: float = 12.0
+        self._timeout: float = 6.0
         self._client: Optional[httpx.AsyncClient] = None
         self._client_loop: Any = None
 
@@ -382,15 +393,15 @@ class KspBridgePlugin(NekoPluginBase):
         self._bridge_url = _as_text(section.get("bridge_url")) or DEFAULT_BRIDGE_URL
 
         try:
-            self._timeout = float(section.get("timeout_seconds", 12))
+            self._timeout = float(section.get("timeout_seconds", 6))
         except (TypeError, ValueError):
-            self._timeout = 12.0
+            self._timeout = 6.0
         self._timeout = min(max(self._timeout, 3.0), 60.0)
 
         self._auto_brief_enabled = _as_bool(section.get("auto_brief_enabled"), True)
         brief_interval = _num(section.get("auto_brief_interval_seconds"))
         self._auto_brief_interval = (
-            min(max(brief_interval, 5.0), 300.0) if brief_interval is not None else 30.0
+            min(max(brief_interval, 5.0), 300.0) if brief_interval is not None else 15.0
         )
 
         self.logger.info(
@@ -520,6 +531,7 @@ class KspBridgePlugin(NekoPluginBase):
                 "scene": state.get("scene"),
                 "summary": _summarize_state(state),
                 "vessel": vessel,
+                "throttle": vessel.get("throttle"),
                 "orbit": _as_dict(state.get("orbit")),
                 "resources": _as_dict(state.get("resources")).get("resources") or [],
                 "crew": _as_dict(state.get("crew")).get("crew") or [],
@@ -891,17 +903,74 @@ def _summarize_state(state: Dict[str, Any]) -> str:
     return text
 
 
+def _fuel_percent(state: Dict[str, Any]) -> Optional[float]:
+    """从 /state 内嵌的 resources 里算「主要推进剂还剩百分之多少」。
+
+    优先 LiquidFuel，退而求其次 SolidFuel / MonoPropellant。
+    资源量变化快，但这是玩家最常问的问题之一，值得进自动播报。
+    """
+    resources = _as_dict(state.get("resources"))
+    items = resources.get("resources")
+    if not isinstance(items, list) or not items:
+        return None
+    wanted = ("LiquidFuel", "SolidFuel", "MonoPropellant")
+    by_name: Dict[str, float] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = _as_text(item.get("name"))
+        pct = _num(item.get("percent"))
+        if name and pct is not None:
+            by_name[name] = pct
+    for name in wanted:
+        if name in by_name:
+            return by_name[name]
+    return None
+
+
 def _auto_brief_line(state: Dict[str, Any]) -> str:
     """把 /state 压成一行自动播报。
 
     没有飞船时返回空串，表示「这条不用发」—— 停机坪、编辑器、主菜单里
     反复播报「当前没有可读的飞船」只是浪费上下文。
+
     刻意压短：这一段会一直待在上下文里，跟着每一轮对话走。
+    但凡玩家最常追问的几项（轨道根数、油门、燃料）能塞进来的都塞进来，
+    这样「我的轨道怎么样」「油还够吗」就不必再走一次工具往返。
     """
     vessel = _as_dict(state.get("vessel"))
     if not _as_bool(vessel.get("exists")):
         return ""
-    return AUTO_BRIEF_PREFIX + _summarize_state(state)
+
+    text = AUTO_BRIEF_PREFIX + _summarize_state(state)
+
+    extra: List[str] = []
+    throttle = _num(vessel.get("throttle"))
+    if throttle is not None:
+        extra.append(f"油门 {throttle * 100:.0f}%")
+
+    orbit = _as_dict(state.get("orbit"))
+    if _as_bool(orbit.get("exists")):
+        ecc = _num(orbit.get("eccentricity"))
+        inc = _num(orbit.get("inclination"))
+        period = _fmt_time(orbit.get("period"))
+        detail = []
+        if ecc is not None:
+            detail.append(f"离心率 {ecc:.4f}")
+        if inc is not None:
+            detail.append(f"倾角 {inc:.2f}°")
+        if period and period != "-":
+            detail.append(f"周期 {period}")
+        if detail:
+            extra.append("、".join(detail))
+
+    fuel = _fuel_percent(state)
+    if fuel is not None:
+        extra.append(f"燃料 {fuel * 100:.0f}%")
+
+    if extra:
+        text += "（" + "，".join(extra) + "）"
+    return text
 
 
 def _summarize_orbit(orbit: Dict[str, Any]) -> str:

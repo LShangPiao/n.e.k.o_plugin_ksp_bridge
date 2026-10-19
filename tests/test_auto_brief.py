@@ -69,7 +69,6 @@ def test_line_is_short_enough_to_live_in_context() -> None:
     """这段会一直待在上下文里，不能太长。"""
     assert len(_auto_brief_line(_FLIGHT)) < 400
 
-
 def test_line_is_empty_without_vessel() -> None:
     """停机坪/编辑器里没有飞船，不该反复播报。"""
     assert _auto_brief_line(_NO_VESSEL) == ""
@@ -77,6 +76,36 @@ def test_line_is_empty_without_vessel() -> None:
 
 def test_line_has_no_double_prefix() -> None:
     assert _auto_brief_line(_FLIGHT).count(AUTO_BRIEF_PREFIX) == 1
+
+
+def test_line_carries_throttle_and_orbit_detail() -> None:
+    """问「油门多少」「轨道根数」不该再走一次工具往返。"""
+    state = dict(_FLIGHT)
+    state["vessel"] = dict(_FLIGHT["vessel"], throttle=0.75)
+    text = _auto_brief_line(state)
+    assert "油门 75%" in text
+    assert "离心率" in text
+    assert "倾角" in text
+
+
+def test_line_carries_fuel_percent() -> None:
+    state = dict(_FLIGHT)
+    state["resources"] = {
+        "ok": True,
+        "count": 2,
+        "resources": [
+            {"name": "LiquidFuel", "amount": 400.0, "max": 800.0, "percent": 0.5},
+            {"name": "Oxidizer", "amount": 800.0, "max": 800.0, "percent": 1.0},
+        ],
+    }
+    assert "燃料 50%" in _auto_brief_line(state)
+
+
+def test_line_survives_missing_throttle_and_resources() -> None:
+    """老模组没有 throttle 字段时不能崩，也不能编一个数字出来。"""
+    text = _auto_brief_line(_FLIGHT)
+    assert "油门" not in text
+    assert AUTO_BRIEF_PREFIX in text
 
 
 # ── 推送行为 ──────────────────────────────────────────────────────────────

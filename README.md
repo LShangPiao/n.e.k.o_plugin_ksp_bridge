@@ -74,9 +74,9 @@
 在 N.E.K.O 的插件设置里可以改：
 
 - **bridge_url** —— 模组监听的地址，默认 `http://127.0.0.1:21579`
-- **timeout_seconds** —— 请求超时，默认 12 秒
+- **timeout_seconds** —— 请求超时，默认 6 秒（正常是毫秒级，短一点更快报错）
 - **auto_brief_enabled** —— 自动播报，默认开
-- **auto_brief_interval_seconds** —— 自动播报间隔，默认 30 秒（范围 5-300）
+- **auto_brief_interval_seconds** —— 自动播报间隔，默认 15 秒（范围 5-300）
 
 > 改端口要改**两处**：模组侧的 `neko-ksp-bridge.ini` 和这里的 `bridge_url`。
 
