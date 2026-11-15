@@ -8,8 +8,12 @@ on:
       - "v*"
   workflow_dispatch:
 
+# 上游 plugin-market-release.yml 自 2026-11-09（#3655）起在独立 job 里签发构建证明，
+# 需要 id-token / attestations 权限；调用方不授予会直接 startup_failure，故显式声明。
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
